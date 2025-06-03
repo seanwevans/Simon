@@ -8,10 +8,10 @@
 #include <sys/socket.h>
 #include "server.h"
 
-const char *http_200 = "HTTP/1.1 200 OK\nContent-Type: %s\r\n\r\n";
-const char *http_400 = "HTTP/1.1 400 BAD REQUEST\nContent-Type: text/html\r\n\r\n";
-const char *http_404 = "HTTP/1.1 404 NOT FOUND\nContent-Type: text/html\r\n\r\n";
-const char *http_500 = "HTTP/1.1 500 INTERNAL SERVER ERROR\nContent-Type: text/html\r\n\r\n";
+const char *http_200 = "HTTP/1.1 200 OK\r\nContent-Type: %s\r\n\r\n";
+const char *http_400 = "HTTP/1.1 400 BAD REQUEST\r\nContent-Type: text/html\r\n\r\n";
+const char *http_404 = "HTTP/1.1 404 NOT FOUND\r\nContent-Type: text/html\r\n\r\n";
+const char *http_500 = "HTTP/1.1 500 INTERNAL SERVER ERROR\r\nContent-Type: text/html\r\n\r\n";
 
 const char *body_400 = "<html><body><h1>400 Bad Request</h1></body></html>";
 const char *body_404 = "<html><body><h1>404 Not Found</h1></body></html>";
@@ -101,7 +101,7 @@ void handle_connection(int client_fd, char *filename) {
         write(client_fd, http_404, strlen(http_404));
         write(client_fd, body_404, strlen(body_404));
     } else {
-        int send_status = send_file(fp, client_fd);
+        int send_status = send_file(fp, client_fd, response_header);
         fclose(fp);
 
         if (send_status < 0) {

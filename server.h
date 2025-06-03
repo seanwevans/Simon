@@ -62,8 +62,8 @@ Server select_server(Server servers[], int num_servers);
 
 // request
 int is_valid_request(const char *request);
-int send_file(FILE *fp, int sockfd);
-int send_chunked_file(FILE *fp, int sockfd);
+int send_file(FILE *fp, int sockfd, const char *header);
+int send_chunked_file(FILE *fp, int sockfd, const char *header);
 
 // logging
 void log_message(const char *filename, const char *message);

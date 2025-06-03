@@ -9,12 +9,11 @@ int is_valid_request(const char *request) {
     return (strstr(request, "GET") == request) && (strstr(request, "HTTP/1.1") || strstr(request, "HTTP/1.0"));
 }
 
-int send_file(FILE *fp, int sockfd) {
+int send_file(FILE *fp, int sockfd, const char *header) {
     char data[BUFFER_SIZE] = {0};
     int n;
 
-    char *http_200 = "HTTP/1.1 200 OK\nContent-Type: text/html\n\n";    
-    if (send(sockfd, http_200, strlen(http_200), 0) == -1) {
+    if (send(sockfd, header, strlen(header), 0) == -1) {
         perror("Failed to send HTTP header");
         return -1;
     }
@@ -30,13 +29,11 @@ int send_file(FILE *fp, int sockfd) {
     return 0;
 }
 
-int send_chunked_file(FILE *fp, int sockfd) {
+int send_chunked_file(FILE *fp, int sockfd, const char *header) {
     char data[BUFFER_SIZE] = {0};
     int n;
 
-    char *http_200_chunked = "HTTP/1.1 200 OK\nContent-Type: text/html\nTransfer-Encoding: chunked\n\n";
-
-    if (send(sockfd, http_200_chunked, strlen(http_200_chunked), 0) == -1) {
+    if (send(sockfd, header, strlen(header), 0) == -1) {
         perror("Failed to send HTTP header");
         return -1;
     }
