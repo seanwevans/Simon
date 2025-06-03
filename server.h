@@ -75,7 +75,6 @@ void client_queue_init(ClientQueue *q);
 void client_queue_push(ClientQueue *q, int client_fd);
 int client_queue_pop(ClientQueue *q);
 void *worker_thread(void *arg);
-void handle_connection(int client_fd, char *filename);
 
 // utils
 void parse_arguments(int argc, char *argv[], Server *config);
