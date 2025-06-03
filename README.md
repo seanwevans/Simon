@@ -73,5 +73,5 @@ Default configurations can be modified in `server.h`:
 - Enhance logging with more detailed analytics.
 
 ## License
-This project is licensed under the MIT License.
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
