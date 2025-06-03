@@ -25,7 +25,7 @@ int send_file(FILE *fp, int sockfd) {
             return -1;
         }
 
-        bzero(data, BUFFER_SIZE);
+        memset(data, 0, BUFFER_SIZE);
     }
     return 0;
 }
@@ -59,7 +59,7 @@ int send_chunked_file(FILE *fp, int sockfd) {
             return -1;
         }
 
-        bzero(data, BUFFER_SIZE);
+        memset(data, 0, BUFFER_SIZE);
     }
 
     if (send(sockfd, "0\r\n\r\n", 5, 0) == -1) {
