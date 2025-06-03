@@ -44,11 +44,11 @@ int create_server(int port) {
 void start_server(Server* config) {
     int server_fd = create_server(config->port);
 
-    pthread_t threads[NUM_THREADS];
+    pthread_t *threads = malloc(sizeof(pthread_t) * config->num_threads);
 
     client_queue_init(&client_queue);
 
-    for (int i = 0; i < NUM_THREADS; i++) {
+    for (int i = 0; i < config->num_threads; i++) {
         pthread_create(&threads[i], NULL, worker_thread, config->file);
     }
 

@@ -7,14 +7,14 @@
 
 void parse_arguments(int argc, char *argv[], Server *config) {
     if (argc < 2) {
-        fprintf(stderr, "Usage: %s <filename> [port]\n", argv[0]);
+        fprintf(stderr, "Usage: %s <filename> [port] [core_count] [num_threads]\n", argv[0]);
         exit(EXIT_FAILURE);
     }
 
     config->file = argv[1];
-    config->port = (argc > 2) ? atoi(argv[2]) : DEFAULT_PORT;    
-    config->core_count = 16;
-    config->num_threads = 8;    
+    config->port = (argc > 2) ? atoi(argv[2]) : DEFAULT_PORT;
+    config->core_count = (argc > 3) ? atoi(argv[3]) : 16;
+    config->num_threads = (argc > 4) ? atoi(argv[4]) : NUM_THREADS;
 }
 
 const char* get_mime_type(const char *filename) {

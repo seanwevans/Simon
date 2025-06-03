@@ -37,10 +37,12 @@ gcc -o webserver main.c server.c queue.c request.c logging.c utils.c parseutf.c 
 
 ### Run
 ```bash
-./webserver <filename> [port]
+./webserver <filename> [port] [core_count] [num_threads]
 ```
 - `filename`: The default file to serve (e.g., index.html).
 - `port` (optional): The port on which the server will listen (default: 8080).
+- `core_count` (optional): Number of CPU cores to normalize load against (default: 16).
+- `num_threads` (optional): Number of worker threads to spawn (default: 8).
 
 ### Example
 ```bash
