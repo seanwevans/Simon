@@ -60,7 +60,12 @@ void start_server(Server* config) {
         exit(EXIT_FAILURE);
     }
 
-    printf("Server listening on port %d\r\n", ntohs(address.sin_port));
+    // If port was dynamically assigned (e.g., 0), query the bound port
+    socklen_t len = sizeof(address);
+    if (getsockname(server_fd, (struct sockaddr *)&address, &len) == 0) {
+        config->port = ntohs(address.sin_port);
+    }
+    printf("Server listening on port %d\r\n", config->port);
 
     while (1) {
         int client_fd;
