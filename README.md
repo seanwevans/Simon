@@ -16,7 +16,6 @@ This project is a lightweight multi-threaded web server implemented in C. It sup
 ├── logging.c      # Logging functions for messages and errors
 ├── main.c         # Entry point, initializes and starts the server
 ├── parseutf.c     # UTF-8/UTF-16/UTF-32 validation logic
-├── parseutf8.c    # Alternative UTF validation methods
 ├── queue.c        # Client queue management with mutex and semaphore
 ├── request.c      # HTTP request validation and file sending
 ├── server.c       # Core server logic: socket creation, listening, and threading
@@ -24,6 +23,10 @@ This project is a lightweight multi-threaded web server implemented in C. It sup
 ├── utils.c        # Utility functions (argument parsing, MIME type detection)
 └── README.md      # Project documentation
 ```
+
+`parseutf8.c` was an earlier alternative for UTF validation. The file
+is no longer maintained and has been removed from the build in favor of
+`parseutf.c`, which provides the current validation routines.
 
 ## How to Build and Run
 ### Prerequisites
