@@ -6,7 +6,27 @@
 #include "server.h"
 
 int is_valid_request(const char *request) {
-    return (strstr(request, "GET") == request) && (strstr(request, "HTTP/1.1") || strstr(request, "HTTP/1.0"));
+    const char *ptr;
+    char version[16];
+
+    if (strncmp(request, "GET ", 4) != 0) {
+        return 0;
+    }
+
+    ptr = strchr(request + 4, ' ');
+    if (!ptr) {
+        return 0;
+    }
+
+    if (sscanf(ptr + 1, "%15s", version) != 1) {
+        return 0;
+    }
+
+    if (strcmp(version, "HTTP/1.1") != 0 && strcmp(version, "HTTP/1.0") != 0) {
+        return 0;
+    }
+
+    return 1;
 }
 
 int send_file(FILE *fp, int sockfd, const char *header) {
