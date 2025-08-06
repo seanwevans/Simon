@@ -6,6 +6,8 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
+#include <signal.h>
+#include <errno.h>
 #include "server.h"
 
 const char *http_200 = "HTTP/1.1 200 OK\r\nContent-Type: %s\r\n\r\n";
@@ -18,6 +20,18 @@ const char *body_404 = "<html><body><h1>404 Not Found</h1></body></html>";
 const char *body_500 = "<html><body><h1>500 Internal Server Error</h1></body></html>";
 
 ClientQueue client_queue;
+
+static pthread_t *thread_handles = NULL;
+static volatile sig_atomic_t running = 1;
+static int server_fd_global = -1;
+
+static void handle_sigint(int sig) {
+    (void)sig;
+    running = 0;
+    if (server_fd_global != -1) {
+        close(server_fd_global);
+    }
+}
 
 
 int create_server(int port) {
@@ -48,14 +62,37 @@ int create_server(int port) {
 }
 
 void start_server(Server* config) {
-    int server_fd = create_server(config->port);
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = handle_sigint;
+    sigaction(SIGINT, &sa, NULL);
 
-    pthread_t *threads = malloc(sizeof(pthread_t) * config->num_threads);
+    int server_fd = create_server(config->port);
+    server_fd_global = server_fd;
+
+    thread_handles = malloc(sizeof(pthread_t) * config->num_threads);
+    if (thread_handles == NULL) {
+        perror("malloc failed");
+        log_error("Failed to allocate thread handles");
+        close(server_fd);
+        exit(EXIT_FAILURE);
+    }
 
     client_queue_init(&client_queue);
 
     for (int i = 0; i < config->num_threads; i++) {
-        pthread_create(&threads[i], NULL, worker_thread, config->file);
+        int rc = pthread_create(&thread_handles[i], NULL, worker_thread, config->file);
+        if (rc != 0) {
+            perror("pthread_create");
+            log_error("pthread_create failed");
+            for (int j = 0; j < i; j++) {
+                pthread_cancel(thread_handles[j]);
+                pthread_join(thread_handles[j], NULL);
+            }
+            free(thread_handles);
+            close(server_fd);
+            exit(EXIT_FAILURE);
+        }
     }
 
     struct sockaddr_in address;
@@ -73,15 +110,25 @@ void start_server(Server* config) {
     }
     printf("Server listening on port %d\r\n", config->port);
 
-    while (1) {
-        int client_fd;
-        if ((client_fd = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen)) < 0) {
+    while (running) {
+        int client_fd = accept(server_fd, (struct sockaddr *)&address, (socklen_t*)&addrlen);
+        if (client_fd < 0) {
+            if (errno == EINTR && !running) {
+                break;
+            }
             perror("accept");
-            exit(EXIT_FAILURE);
+            continue;
         }
 
         client_queue_push(&client_queue, client_fd);
     }
+
+    for (int i = 0; i < config->num_threads; i++) {
+        pthread_cancel(thread_handles[i]);
+        pthread_join(thread_handles[i], NULL);
+    }
+    free(thread_handles);
+    close(server_fd);
 }
 
 void handle_connection(int client_fd, char *filename) {
@@ -152,9 +199,15 @@ ServerPriority determine_priority(double one_min_load, int core_count) {
     }
 }
 
-Server select_server(Server servers[], int num_servers) {    
+Server select_server(Server servers[], int num_servers) {
     Server *high_priority_servers = malloc(sizeof(Server) * num_servers);
     Server *medium_priority_servers = malloc(sizeof(Server) * num_servers);
+    if (high_priority_servers == NULL || medium_priority_servers == NULL) {
+        log_error("Failed to allocate memory for server selection");
+        free(high_priority_servers);
+        free(medium_priority_servers);
+        return servers[rand() % num_servers];
+    }
     int high_count = 0;
     int medium_count = 0;
 
