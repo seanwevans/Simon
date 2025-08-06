@@ -10,19 +10,6 @@ This project is a lightweight multi-threaded web server implemented in C. It sup
 - **Logging**: Records errors, connections, and messages to log files.
 - **Queue-based request handling**: Manages incoming connections with a semaphore-based queue.
 
-## File Structure
-```
-.
-├── logging.c      # Logging functions for messages and errors
-├── main.c         # Entry point, initializes and starts the server
-├── parseutf.c     # UTF-8/UTF-16/UTF-32 validation logic
-├── queue.c        # Client queue management with mutex and semaphore
-├── request.c      # HTTP request validation and file sending
-├── server.c       # Core server logic: socket creation, listening, and threading
-├── server.h       # Header file with server configuration and function prototypes
-├── utils.c        # Utility functions (argument parsing, MIME type detection)
-└── README.md      # Project documentation
-```
 
 `parseutf8.c` was an earlier alternative for UTF validation. The file
 is no longer maintained and has been removed from the build in favor of
