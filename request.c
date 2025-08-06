@@ -3,8 +3,32 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
-#include <errno.h>
 #include "server.h"
+
+int is_valid_request(const char *request) {
+    const char *ptr;
+    char version[16];
+
+    if (strncmp(request, "GET ", 4) != 0) {
+        return 0;
+    }
+
+    ptr = strchr(request + 4, ' ');
+    if (!ptr) {
+        return 0;
+    }
+
+    if (sscanf(ptr + 1, "%15s", version) != 1) {
+        return 0;
+    }
+
+    if (strcmp(version, "HTTP/1.1") != 0 && strcmp(version, "HTTP/1.0") != 0) {
+        return 0;
+    }
+
+    return 1;
+}
+
 
 static int send_all(int sockfd, const char *buf, size_t len) {
     size_t total = 0;
