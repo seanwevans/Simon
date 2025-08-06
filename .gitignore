@@ -1,0 +1,14 @@
+# Compiled binary
+webserver
+
+# Object files
+*.o
+
+# Log files
+*.log
+
+# Additional build artifacts
+*.out
+*.tmp
+*.swp
+*~

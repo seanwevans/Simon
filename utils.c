@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 #include "server.h"
 
 void parse_arguments(int argc, char *argv[], Server *config) {
@@ -12,9 +13,45 @@ void parse_arguments(int argc, char *argv[], Server *config) {
     }
 
     config->file = argv[1];
-    config->port = (argc > 2) ? atoi(argv[2]) : DEFAULT_PORT;
-    config->core_count = (argc > 3) ? atoi(argv[3]) : 16;
-    config->num_threads = (argc > 4) ? atoi(argv[4]) : NUM_THREADS;
+
+    if (argc > 2) {
+        char *endptr;
+        errno = 0;
+        long port = strtol(argv[2], &endptr, 10);
+        if (errno != 0 || *endptr != '\0' || port < 1 || port > 65535) {
+            fprintf(stderr, "Invalid port number: %s\n", argv[2]);
+            exit(EXIT_FAILURE);
+        }
+        config->port = (int)port;
+    } else {
+        config->port = DEFAULT_PORT;
+    }
+
+    if (argc > 3) {
+        char *endptr;
+        errno = 0;
+        long cores = strtol(argv[3], &endptr, 10);
+        if (errno != 0 || *endptr != '\0' || cores <= 0) {
+            fprintf(stderr, "Invalid core count: %s\n", argv[3]);
+            exit(EXIT_FAILURE);
+        }
+        config->core_count = (int)cores;
+    } else {
+        config->core_count = 16;
+    }
+
+    if (argc > 4) {
+        char *endptr;
+        errno = 0;
+        long threads = strtol(argv[4], &endptr, 10);
+        if (errno != 0 || *endptr != '\0' || threads <= 0) {
+            fprintf(stderr, "Invalid thread count: %s\n", argv[4]);
+            exit(EXIT_FAILURE);
+        }
+        config->num_threads = (int)threads;
+    } else {
+        config->num_threads = NUM_THREADS;
+    }
 }
 
 const char* get_mime_type(const char *filename) {
