@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <errno.h>
 #include "server.h"
 
 int is_valid_request(const char *request) {
@@ -45,12 +46,8 @@ static int send_all(int sockfd, const char *buf, size_t len) {
     return 0;
 }
 
-int is_valid_request(const char *request) {
-    return (strstr(request, "GET") == request) && (strstr(request, "HTTP/1.1") || strstr(request, "HTTP/1.0"));
-}
-
 int send_file(FILE *fp, int sockfd, const char *header) {
-    char data[BUFFER_SIZE] = {0};
+    char data[BUFFER_SIZE];
     int n;
 
     if (send_all(sockfd, header, strlen(header)) == -1) {
@@ -63,14 +60,12 @@ int send_file(FILE *fp, int sockfd, const char *header) {
             perror("Failed to send file");
             return -1;
         }
-
-        memset(data, 0, BUFFER_SIZE);
     }
     return 0;
 }
 
 int send_chunked_file(FILE *fp, int sockfd, const char *header) {
-    char data[BUFFER_SIZE] = {0};
+    char data[BUFFER_SIZE];
     int n;
 
     if (send_all(sockfd, header, strlen(header)) == -1) {
@@ -95,8 +90,6 @@ int send_chunked_file(FILE *fp, int sockfd, const char *header) {
             perror("Failed to send CRLF after chunk");
             return -1;
         }
-
-        memset(data, 0, BUFFER_SIZE);
     }
 
     if (send_all(sockfd, "0\r\n\r\n", 5) == -1) {
