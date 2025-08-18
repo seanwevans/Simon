@@ -38,7 +38,8 @@ int create_server(int port) {
     int server_fd;
     struct sockaddr_in address;
 
-    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
+    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        // socket returns -1 on failure
         perror("socket failed");
         exit(EXIT_FAILURE);
     }
