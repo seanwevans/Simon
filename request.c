@@ -43,6 +43,7 @@ static int send_all(int sockfd, const char *buf, size_t len) {
         }
         total += (size_t)sent;
     }
+
     return 0;
 }
 

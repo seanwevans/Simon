@@ -150,11 +150,45 @@ void handle_connection(int client_fd, char *filename) {
         return;
     }
 
+    char requested_path[BUFFER_SIZE] = {0};
+    if (sscanf(buffer, "GET %2047s", requested_path) != 1) {
+        write(client_fd, http_400, strlen(http_400));
+        write(client_fd, body_400, strlen(body_400));
+        close(client_fd);
+        return;
+    }
+
+    char *query = strchr(requested_path, '?');
+    if (query) {
+        *query = '\0';
+    }
+
+    char *path = requested_path;
+    if (path[0] == '/') {
+        path++;
+    }
+
+    if (strstr(path, "..") != NULL) {
+        write(client_fd, http_400, strlen(http_400));
+        write(client_fd, body_400, strlen(body_400));
+        close(client_fd);
+        return;
+    }
+
+    char filepath[BUFFER_SIZE];
+    if (*path == '\0') {
+        strncpy(filepath, filename, sizeof(filepath));
+        filepath[sizeof(filepath) - 1] = '\0';
+    } else {
+        strncpy(filepath, path, sizeof(filepath));
+        filepath[sizeof(filepath) - 1] = '\0';
+    }
+
     char response_header[512];
-    const char *mime_type = get_mime_type(filename);    
+    const char *mime_type = get_mime_type(filepath);
     snprintf(response_header, sizeof(response_header), http_200, mime_type);
 
-    FILE *fp = fopen(filename, "rb");
+    FILE *fp = fopen(filepath, "rb");
     if (fp == NULL) {
         write(client_fd, http_404, strlen(http_404));
         write(client_fd, body_404, strlen(body_404));
@@ -221,16 +255,21 @@ Server select_server(Server servers[], int num_servers) {
         }
     }
 
-    Server *server;
+    /*
+     * Select a server based on priority and copy it to a local variable
+     * before freeing the priority arrays. This avoids returning a pointer
+     * to freed memory.
+     */
+    Server selected_server;
     if (high_count > 0) {
-        server = &high_priority_servers[rand() % high_count];
-    } else if (medium_count > 0) {        
-        server = &medium_priority_servers[rand() % medium_count];
+        selected_server = high_priority_servers[rand() % high_count];
+    } else if (medium_count > 0) {
+        selected_server = medium_priority_servers[rand() % medium_count];
     } else {
-        server = &servers[rand() % num_servers];
+        selected_server = servers[rand() % num_servers];
     }
     free(medium_priority_servers);
     free(high_priority_servers);
 
-    return *server;
+    return selected_server;
 }
