@@ -255,16 +255,21 @@ Server select_server(Server servers[], int num_servers) {
         }
     }
 
-    Server *server;
+    /*
+     * Select a server based on priority and copy it to a local variable
+     * before freeing the priority arrays. This avoids returning a pointer
+     * to freed memory.
+     */
+    Server selected_server;
     if (high_count > 0) {
-        server = &high_priority_servers[rand() % high_count];
-    } else if (medium_count > 0) {        
-        server = &medium_priority_servers[rand() % medium_count];
+        selected_server = high_priority_servers[rand() % high_count];
+    } else if (medium_count > 0) {
+        selected_server = medium_priority_servers[rand() % medium_count];
     } else {
-        server = &servers[rand() % num_servers];
+        selected_server = servers[rand() % num_servers];
     }
     free(medium_priority_servers);
     free(high_priority_servers);
 
-    return *server;
+    return selected_server;
 }
