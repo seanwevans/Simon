@@ -4,17 +4,33 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <limits.h>
+#include <sys/stat.h>
 #include "server.h"
 
 void parse_arguments(int argc, char *argv[], Server *config) {
     if (argc < 2) {
-        fprintf(stderr, "Usage: %s <filename> [port] [core_count] [num_threads] [request_timeout_ms] [max_request_line]\n", argv[0]);
+        fprintf(stderr, "Usage: %s <filename> [port] [core_count] [num_threads] [docroot]\n", argv[0]);
         exit(EXIT_FAILURE);
     }
 
-    config->file = argv[1];
-    config->request_timeout_ms = DEFAULT_REQUEST_TIMEOUT_MS;
-    config->max_request_line_size = DEFAULT_MAX_REQUEST_LINE_SIZE;
+    const char *default_file_arg = argv[1];
+    while (*default_file_arg == '/') {
+        default_file_arg++;
+    }
+
+    if (*default_file_arg == '\0') {
+        fprintf(stderr, "Default file must not be empty\n");
+        exit(EXIT_FAILURE);
+    }
+
+    size_t default_len = strlen(default_file_arg);
+    config->file = malloc(default_len + 1);
+    if (config->file == NULL) {
+        perror("Failed to allocate memory for default file path");
+        exit(EXIT_FAILURE);
+    }
+    memcpy(config->file, default_file_arg, default_len + 1);
 
     if (argc > 2) {
         char *endptr;

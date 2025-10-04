@@ -18,6 +18,7 @@ const char *http_500 = "HTTP/1.1 500 INTERNAL SERVER ERROR\r\nContent-Type: text
 const char *http_408 = "HTTP/1.1 408 REQUEST TIMEOUT\r\nContent-Type: text/html\r\n\r\n";
 
 const char *body_400 = "<html><body><h1>400 Bad Request</h1></body></html>";
+const char *body_403 = "<html><body><h1>403 Forbidden</h1></body></html>";
 const char *body_404 = "<html><body><h1>404 Not Found</h1></body></html>";
 const char *body_500 = "<html><body><h1>500 Internal Server Error</h1></body></html>";
 const char *body_408 = "<html><body><h1>408 Request Timeout</h1></body></html>";
@@ -70,6 +71,14 @@ void start_server(Server* config) {
     memset(&sa, 0, sizeof(sa));
     sa.sa_handler = handle_sigint;
     sigaction(SIGINT, &sa, NULL);
+
+    struct sigaction sa_pipe;
+    memset(&sa_pipe, 0, sizeof(sa_pipe));
+    sa_pipe.sa_handler = SIG_IGN;
+    if (sigaction(SIGPIPE, &sa_pipe, NULL) != 0) {
+        perror("sigaction(SIGPIPE)");
+        log_error("Failed to ignore SIGPIPE; continuing without SIGPIPE handling");
+    }
 
     int server_fd = create_server(config->port);
     server_fd_global = server_fd;
@@ -136,198 +145,121 @@ void start_server(Server* config) {
 }
 
 void handle_connection(int client_fd, const Server *config) {
-    if (config == NULL) {
+    char buffer[BUFFER_SIZE] = {0};
+
+    int bytes_read = read(client_fd, buffer, BUFFER_SIZE - 1);
+    if (bytes_read < 0) {
+        perror("read");
         close(client_fd);
         return;
     }
 
-    struct timeval timeout;
-    timeout.tv_sec = config->request_timeout_ms / 1000;
-    timeout.tv_usec = (config->request_timeout_ms % 1000) * 1000;
-    if (setsockopt(client_fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0) {
-        perror("setsockopt(SO_RCVTIMEO)");
-        log_error("Failed to set receive timeout on client socket");
-    }
+    buffer[bytes_read] = '\0';
 
-    size_t limit = config->max_request_line_size > 0 ?
-                   config->max_request_line_size : DEFAULT_MAX_REQUEST_LINE_SIZE;
-    char *request_line = malloc(limit + 1);
-    if (request_line == NULL) {
-        log_error("Failed to allocate request buffer");
-        write(client_fd, http_500, strlen(http_500));
-        write(client_fd, body_500, strlen(body_500));
-        close(client_fd);
-        return;
-    }
-
-    size_t total = 0;
-    int timed_out = 0;
-    int read_error = 0;
-
-    while (total < limit) {
-        ssize_t bytes_read = read(client_fd, request_line + total, limit - total);
-        if (bytes_read < 0) {
-            if (errno == EINTR) {
-                continue;
-            }
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                timed_out = 1;
-            } else {
-                perror("read");
-                read_error = 1;
-            }
-            break;
-        }
-        if (bytes_read == 0) {
-            break;
-        }
-        total += (size_t)bytes_read;
-        if (memchr(request_line, '\n', total) != NULL) {
-            break;
-        }
-    }
-
-    if (timed_out) {
-        write(client_fd, http_408, strlen(http_408));
-        write(client_fd, body_408, strlen(body_408));
-        free(request_line);
-        close(client_fd);
-        return;
-    }
-
-    if (read_error || total == 0) {
+    if (!is_valid_request(buffer)) {
         write(client_fd, http_400, strlen(http_400));
         write(client_fd, body_400, strlen(body_400));
-        free(request_line);
         close(client_fd);
         return;
     }
 
-    char *newline = memchr(request_line, '\n', total);
-    if (newline == NULL) {
-        if (total >= limit) {
-            write(client_fd, http_400, strlen(http_400));
-            write(client_fd, body_400, strlen(body_400));
-            free(request_line);
-            close(client_fd);
-            return;
-        }
-        request_line[total] = '\0';
-    } else {
-        size_t line_len = (size_t)(newline - request_line);
-        if (line_len > 0 && request_line[line_len - 1] == '\r') {
-            request_line[line_len - 1] = '\0';
-        } else {
-            request_line[line_len] = '\0';
-        }
-    }
-
-    if (!is_valid_request(request_line)) {
+    char requested_path[BUFFER_SIZE] = {0};
+    if (sscanf(buffer, "GET %2047s", requested_path) != 1) {
         write(client_fd, http_400, strlen(http_400));
         write(client_fd, body_400, strlen(body_400));
-        free(request_line);
         close(client_fd);
         return;
     }
 
-    const char *method_end = strchr(request_line, ' ');
-    if (method_end == NULL) {
-        write(client_fd, http_400, strlen(http_400));
-        write(client_fd, body_400, strlen(body_400));
-        free(request_line);
-        close(client_fd);
-        return;
-    }
-
-    const char *path_start = method_end + 1;
-    while (*path_start == ' ') {
-        path_start++;
-    }
-    if (*path_start == '\0') {
-        write(client_fd, http_400, strlen(http_400));
-        write(client_fd, body_400, strlen(body_400));
-        free(request_line);
-        close(client_fd);
-        return;
-    }
-
-    const char *path_end = strchr(path_start, ' ');
-    if (path_end == NULL) {
-        write(client_fd, http_400, strlen(http_400));
-        write(client_fd, body_400, strlen(body_400));
-        free(request_line);
-        close(client_fd);
-        return;
-    }
-
-    size_t path_len = (size_t)(path_end - path_start);
-    char *raw_path = malloc(path_len + 1);
-    if (raw_path == NULL) {
-        log_error("Failed to allocate path buffer");
-        write(client_fd, http_500, strlen(http_500));
-        write(client_fd, body_500, strlen(body_500));
-        free(request_line);
-        close(client_fd);
-        return;
-    }
-
-    memcpy(raw_path, path_start, path_len);
-    raw_path[path_len] = '\0';
-
-    char *query = strchr(raw_path, '?');
+    char *query = strchr(requested_path, '?');
     if (query) {
         *query = '\0';
     }
 
-    char *path = raw_path;
+    char *path = requested_path;
     if (path[0] == '/') {
         path++;
     }
 
-    if (strstr(path, "..") != NULL) {
-        write(client_fd, http_400, strlen(http_400));
-        write(client_fd, body_400, strlen(body_400));
-        free(raw_path);
-        free(request_line);
-        close(client_fd);
-        return;
+    const char *relative_path = (*path == '\0') ? config->file : path;
+    while (*relative_path == '/') {
+        relative_path++;
+    }
+    if (*relative_path == '\0') {
+        relative_path = config->file;
     }
 
-    const char *source = (*path == '\0') ? config->file : path;
-    size_t filepath_len = strlen(source);
-    char *filepath = malloc(filepath_len + 1);
-    if (filepath == NULL) {
-        log_error("Failed to allocate filepath buffer");
-        write(client_fd, http_500, strlen(http_500));
-        write(client_fd, body_500, strlen(body_500));
-        free(raw_path);
-        free(request_line);
-        close(client_fd);
-        return;
+    size_t docroot_len = strlen(config->docroot);
+    int docroot_has_trailing_slash = docroot_len > 0 && config->docroot[docroot_len - 1] == '/';
+
+    char candidate_path[PATH_MAX];
+    int required_length;
+    if (docroot_has_trailing_slash) {
+        required_length = snprintf(candidate_path, sizeof(candidate_path), "%s%s", config->docroot, relative_path);
+    } else {
+        required_length = snprintf(candidate_path, sizeof(candidate_path), "%s/%s", config->docroot, relative_path);
     }
-    memcpy(filepath, source, filepath_len + 1);
 
-    char response_header[512];
-    const char *mime_type = get_mime_type(filepath);
-    snprintf(response_header, sizeof(response_header), http_200, mime_type);
-
-    FILE *fp = fopen(filepath, "rb");
-    if (fp == NULL) {
+    if (required_length < 0 || (size_t)required_length >= sizeof(candidate_path)) {
         write(client_fd, http_404, strlen(http_404));
         write(client_fd, body_404, strlen(body_404));
-    } else {
-        int send_status = send_file(fp, client_fd, response_header);
-        fclose(fp);
-
-        if (send_status < 0) {
-            write(client_fd, http_500, strlen(http_500));
-            write(client_fd, body_500, strlen(body_500));
-        }
+        close(client_fd);
+        return;
     }
 
-    free(filepath);
-    free(raw_path);
-    free(request_line);
+    char resolved_path[PATH_MAX];
+    if (realpath(candidate_path, resolved_path) == NULL) {
+        int saved_errno = errno;
+        if (saved_errno == ENOENT || saved_errno == ENOTDIR) {
+            write(client_fd, http_404, strlen(http_404));
+            write(client_fd, body_404, strlen(body_404));
+        } else {
+            write(client_fd, http_403, strlen(http_403));
+            write(client_fd, body_403, strlen(body_403));
+        }
+        close(client_fd);
+        return;
+    }
+
+    int docroot_is_root = (docroot_len == 1 && config->docroot[0] == '/');
+    if (strncmp(resolved_path, config->docroot, docroot_len) != 0 ||
+        (!docroot_is_root && resolved_path[docroot_len] != '\0' && resolved_path[docroot_len] != '/')) {
+        write(client_fd, http_403, strlen(http_403));
+        write(client_fd, body_403, strlen(body_403));
+        close(client_fd);
+        return;
+    }
+
+    FILE *fp = fopen(resolved_path, "rb");
+    if (fp == NULL) {
+        if (errno == EACCES) {
+            write(client_fd, http_403, strlen(http_403));
+            write(client_fd, body_403, strlen(body_403));
+        } else {
+            write(client_fd, http_404, strlen(http_404));
+            write(client_fd, body_404, strlen(body_404));
+        }
+        close(client_fd);
+        return;
+    }
+
+    char response_header[512];
+    const char *mime_type = get_mime_type(resolved_path);
+    snprintf(response_header, sizeof(response_header), http_200, mime_type);
+
+    int send_status = send_file(fp, client_fd, response_header);
+    fclose(fp);
+
+        if (send_status < 0) {
+            if (errno == EPIPE) {
+                log_error("Client disconnected before response was fully sent");
+            } else {
+                write(client_fd, http_500, strlen(http_500));
+                write(client_fd, body_500, strlen(body_500));
+                log_error("Failed to send response; sent HTTP 500 to client");
+            }
+        }
+    }
     close(client_fd);
 }
 
