@@ -20,9 +20,10 @@
 
 typedef struct {
     char *file;
+    char *docroot;
     int port;
     int core_count;
-    int num_threads;    
+    int num_threads;
 } Server;
 
 typedef enum {
@@ -43,10 +44,12 @@ typedef struct {
 extern const char *http_200;
 
 extern const char *http_400;
+extern const char *http_403;
 extern const char *http_404;
 extern const char *http_500;
 
 extern const char *body_400;
+extern const char *body_403;
 extern const char *body_404;
 extern const char *body_500;
 
@@ -55,7 +58,7 @@ extern ClientQueue client_queue;
 // server
 int create_server(int port);
 void start_server(Server* config);
-void handle_connection(int client_fd, char *filename);
+void handle_connection(int client_fd, const Server *config);
 double get_one_minute_load();
 ServerPriority determine_priority(double one_min_load, int core_count);
 Server select_server(Server servers[], int num_servers);

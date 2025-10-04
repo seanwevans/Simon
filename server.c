@@ -8,14 +8,17 @@
 #include <sys/socket.h>
 #include <signal.h>
 #include <errno.h>
+#include <limits.h>
 #include "server.h"
 
 const char *http_200 = "HTTP/1.1 200 OK\r\nContent-Type: %s\r\n\r\n";
 const char *http_400 = "HTTP/1.1 400 BAD REQUEST\r\nContent-Type: text/html\r\n\r\n";
+const char *http_403 = "HTTP/1.1 403 FORBIDDEN\r\nContent-Type: text/html\r\n\r\n";
 const char *http_404 = "HTTP/1.1 404 NOT FOUND\r\nContent-Type: text/html\r\n\r\n";
 const char *http_500 = "HTTP/1.1 500 INTERNAL SERVER ERROR\r\nContent-Type: text/html\r\n\r\n";
 
 const char *body_400 = "<html><body><h1>400 Bad Request</h1></body></html>";
+const char *body_403 = "<html><body><h1>403 Forbidden</h1></body></html>";
 const char *body_404 = "<html><body><h1>404 Not Found</h1></body></html>";
 const char *body_500 = "<html><body><h1>500 Internal Server Error</h1></body></html>";
 
@@ -90,7 +93,7 @@ void start_server(Server* config) {
     client_queue_init(&client_queue);
 
     for (int i = 0; i < config->num_threads; i++) {
-        int rc = pthread_create(&thread_handles[i], NULL, worker_thread, config->file);
+        int rc = pthread_create(&thread_handles[i], NULL, worker_thread, config);
         if (rc != 0) {
             perror("pthread_create");
             log_error("pthread_create failed");
@@ -140,7 +143,7 @@ void start_server(Server* config) {
     close(server_fd);
 }
 
-void handle_connection(int client_fd, char *filename) {
+void handle_connection(int client_fd, const Server *config) {
     char buffer[BUFFER_SIZE] = {0};
 
     int bytes_read = read(client_fd, buffer, BUFFER_SIZE - 1);
@@ -177,33 +180,74 @@ void handle_connection(int client_fd, char *filename) {
         path++;
     }
 
-    if (strstr(path, "..") != NULL) {
-        write(client_fd, http_400, strlen(http_400));
-        write(client_fd, body_400, strlen(body_400));
+    const char *relative_path = (*path == '\0') ? config->file : path;
+    while (*relative_path == '/') {
+        relative_path++;
+    }
+    if (*relative_path == '\0') {
+        relative_path = config->file;
+    }
+
+    size_t docroot_len = strlen(config->docroot);
+    int docroot_has_trailing_slash = docroot_len > 0 && config->docroot[docroot_len - 1] == '/';
+
+    char candidate_path[PATH_MAX];
+    int required_length;
+    if (docroot_has_trailing_slash) {
+        required_length = snprintf(candidate_path, sizeof(candidate_path), "%s%s", config->docroot, relative_path);
+    } else {
+        required_length = snprintf(candidate_path, sizeof(candidate_path), "%s/%s", config->docroot, relative_path);
+    }
+
+    if (required_length < 0 || (size_t)required_length >= sizeof(candidate_path)) {
+        write(client_fd, http_404, strlen(http_404));
+        write(client_fd, body_404, strlen(body_404));
         close(client_fd);
         return;
     }
 
-    char filepath[BUFFER_SIZE];
-    if (*path == '\0') {
-        strncpy(filepath, filename, sizeof(filepath));
-        filepath[sizeof(filepath) - 1] = '\0';
-    } else {
-        strncpy(filepath, path, sizeof(filepath));
-        filepath[sizeof(filepath) - 1] = '\0';
+    char resolved_path[PATH_MAX];
+    if (realpath(candidate_path, resolved_path) == NULL) {
+        int saved_errno = errno;
+        if (saved_errno == ENOENT || saved_errno == ENOTDIR) {
+            write(client_fd, http_404, strlen(http_404));
+            write(client_fd, body_404, strlen(body_404));
+        } else {
+            write(client_fd, http_403, strlen(http_403));
+            write(client_fd, body_403, strlen(body_403));
+        }
+        close(client_fd);
+        return;
+    }
+
+    int docroot_is_root = (docroot_len == 1 && config->docroot[0] == '/');
+    if (strncmp(resolved_path, config->docroot, docroot_len) != 0 ||
+        (!docroot_is_root && resolved_path[docroot_len] != '\0' && resolved_path[docroot_len] != '/')) {
+        write(client_fd, http_403, strlen(http_403));
+        write(client_fd, body_403, strlen(body_403));
+        close(client_fd);
+        return;
+    }
+
+    FILE *fp = fopen(resolved_path, "rb");
+    if (fp == NULL) {
+        if (errno == EACCES) {
+            write(client_fd, http_403, strlen(http_403));
+            write(client_fd, body_403, strlen(body_403));
+        } else {
+            write(client_fd, http_404, strlen(http_404));
+            write(client_fd, body_404, strlen(body_404));
+        }
+        close(client_fd);
+        return;
     }
 
     char response_header[512];
-    const char *mime_type = get_mime_type(filepath);
+    const char *mime_type = get_mime_type(resolved_path);
     snprintf(response_header, sizeof(response_header), http_200, mime_type);
 
-    FILE *fp = fopen(filepath, "rb");
-    if (fp == NULL) {
-        write(client_fd, http_404, strlen(http_404));
-        write(client_fd, body_404, strlen(body_404));
-    } else {
-        int send_status = send_file(fp, client_fd, response_header);
-        fclose(fp);
+    int send_status = send_file(fp, client_fd, response_header);
+    fclose(fp);
 
         if (send_status < 0) {
             if (errno == EPIPE) {
