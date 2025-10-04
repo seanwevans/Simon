@@ -68,6 +68,14 @@ void start_server(Server* config) {
     sa.sa_handler = handle_sigint;
     sigaction(SIGINT, &sa, NULL);
 
+    struct sigaction sa_pipe;
+    memset(&sa_pipe, 0, sizeof(sa_pipe));
+    sa_pipe.sa_handler = SIG_IGN;
+    if (sigaction(SIGPIPE, &sa_pipe, NULL) != 0) {
+        perror("sigaction(SIGPIPE)");
+        log_error("Failed to ignore SIGPIPE; continuing without SIGPIPE handling");
+    }
+
     int server_fd = create_server(config->port);
     server_fd_global = server_fd;
 
@@ -198,8 +206,13 @@ void handle_connection(int client_fd, char *filename) {
         fclose(fp);
 
         if (send_status < 0) {
-            write(client_fd, http_500, strlen(http_500));
-            write(client_fd, body_500, strlen(body_500));
+            if (errno == EPIPE) {
+                log_error("Client disconnected before response was fully sent");
+            } else {
+                write(client_fd, http_500, strlen(http_500));
+                write(client_fd, body_500, strlen(body_500));
+                log_error("Failed to send response; sent HTTP 500 to client");
+            }
         }
     }
     close(client_fd);

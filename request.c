@@ -4,6 +4,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
+#include <sys/socket.h>
 #include "server.h"
 
 int is_valid_request(const char *request) {
@@ -32,9 +33,26 @@ int is_valid_request(const char *request) {
 
 
 static int send_all(int sockfd, const char *buf, size_t len) {
+#if !defined(MSG_NOSIGNAL) && defined(SO_NOSIGPIPE)
+    int set = 1;
+    if (setsockopt(sockfd, SOL_SOCKET, SO_NOSIGPIPE, &set, sizeof(set)) < 0) {
+        if (errno != EINVAL && errno != ENOPROTOOPT
+#ifdef ENOTSUP
+            && errno != ENOTSUP
+#endif
+        ) {
+            perror("setsockopt(SO_NOSIGPIPE)");
+        }
+    }
+#endif
+
     size_t total = 0;
     while (total < len) {
-        ssize_t sent = send(sockfd, buf + total, len - total, 0);
+        int flags = 0;
+#ifdef MSG_NOSIGNAL
+        flags = MSG_NOSIGNAL;
+#endif
+        ssize_t sent = send(sockfd, buf + total, len - total, flags);
         if (sent < 0) {
             if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) {
                 continue;
@@ -52,13 +70,27 @@ int send_file(FILE *fp, int sockfd, const char *header) {
     int n;
 
     if (send_all(sockfd, header, strlen(header)) == -1) {
-        perror("Failed to send HTTP header");
+        int send_errno = errno;
+        if (send_errno == EPIPE) {
+            log_error("Client disconnected while sending HTTP header");
+        } else {
+            perror("Failed to send HTTP header");
+            log_error("Failed to send HTTP header");
+        }
+        errno = send_errno;
         return -1;
     }
 
     while ((n = fread(data, sizeof(char), BUFFER_SIZE, fp)) > 0) {
         if (send_all(sockfd, data, n) == -1) {
-            perror("Failed to send file");
+            int send_errno = errno;
+            if (send_errno == EPIPE) {
+                log_error("Client disconnected while sending file data");
+            } else {
+                perror("Failed to send file");
+                log_error("Failed to send file");
+            }
+            errno = send_errno;
             return -1;
         }
     }
@@ -70,7 +102,14 @@ int send_chunked_file(FILE *fp, int sockfd, const char *header) {
     int n;
 
     if (send_all(sockfd, header, strlen(header)) == -1) {
-        perror("Failed to send HTTP header");
+        int send_errno = errno;
+        if (send_errno == EPIPE) {
+            log_error("Client disconnected while sending chunked header");
+        } else {
+            perror("Failed to send HTTP header");
+            log_error("Failed to send HTTP header");
+        }
+        errno = send_errno;
         return -1;
     }
 
@@ -78,23 +117,51 @@ int send_chunked_file(FILE *fp, int sockfd, const char *header) {
         char chunk_size[10];
         snprintf(chunk_size, sizeof(chunk_size), "%x\r\n", n);
         if (send_all(sockfd, chunk_size, strlen(chunk_size)) == -1) {
-            perror("Failed to send chunk size");
+            int send_errno = errno;
+            if (send_errno == EPIPE) {
+                log_error("Client disconnected while sending chunk size");
+            } else {
+                perror("Failed to send chunk size");
+                log_error("Failed to send chunk size");
+            }
+            errno = send_errno;
             return -1;
         }
 
         if (send_all(sockfd, data, n) == -1) {
-            perror("Failed to send chunk data");
+            int send_errno = errno;
+            if (send_errno == EPIPE) {
+                log_error("Client disconnected while sending chunk data");
+            } else {
+                perror("Failed to send chunk data");
+                log_error("Failed to send chunk data");
+            }
+            errno = send_errno;
             return -1;
         }
 
         if (send_all(sockfd, "\r\n", 2) == -1) {
-            perror("Failed to send CRLF after chunk");
+            int send_errno = errno;
+            if (send_errno == EPIPE) {
+                log_error("Client disconnected before CRLF could be sent");
+            } else {
+                perror("Failed to send CRLF after chunk");
+                log_error("Failed to send CRLF after chunk");
+            }
+            errno = send_errno;
             return -1;
         }
     }
 
     if (send_all(sockfd, "0\r\n\r\n", 5) == -1) {
-        perror("Failed to send end of chunked data");
+        int send_errno = errno;
+        if (send_errno == EPIPE) {
+            log_error("Client disconnected before end of chunked data");
+        } else {
+            perror("Failed to send end of chunked data");
+            log_error("Failed to send end of chunked data");
+        }
+        errno = send_errno;
         return -1;
     }
 
