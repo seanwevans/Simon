@@ -8,19 +8,20 @@
 #include <sys/socket.h>
 #include <signal.h>
 #include <errno.h>
-#include <limits.h>
+#include <sys/time.h>
 #include "server.h"
 
 const char *http_200 = "HTTP/1.1 200 OK\r\nContent-Type: %s\r\n\r\n";
 const char *http_400 = "HTTP/1.1 400 BAD REQUEST\r\nContent-Type: text/html\r\n\r\n";
-const char *http_403 = "HTTP/1.1 403 FORBIDDEN\r\nContent-Type: text/html\r\n\r\n";
 const char *http_404 = "HTTP/1.1 404 NOT FOUND\r\nContent-Type: text/html\r\n\r\n";
 const char *http_500 = "HTTP/1.1 500 INTERNAL SERVER ERROR\r\nContent-Type: text/html\r\n\r\n";
+const char *http_408 = "HTTP/1.1 408 REQUEST TIMEOUT\r\nContent-Type: text/html\r\n\r\n";
 
 const char *body_400 = "<html><body><h1>400 Bad Request</h1></body></html>";
 const char *body_403 = "<html><body><h1>403 Forbidden</h1></body></html>";
 const char *body_404 = "<html><body><h1>404 Not Found</h1></body></html>";
 const char *body_500 = "<html><body><h1>500 Internal Server Error</h1></body></html>";
+const char *body_408 = "<html><body><h1>408 Request Timeout</h1></body></html>";
 
 ClientQueue client_queue;
 

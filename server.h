@@ -16,14 +16,17 @@
 #define BUFFER_SIZE 2048
 #define MAX_QUEUE_SIZE 1024
 #define NUM_THREADS 8
+#define DEFAULT_REQUEST_TIMEOUT_MS 5000
+#define DEFAULT_MAX_REQUEST_LINE_SIZE 4096
 
 
 typedef struct {
     char *file;
-    char *docroot;
     int port;
     int core_count;
     int num_threads;
+    int request_timeout_ms;
+    size_t max_request_line_size;
 } Server;
 
 typedef enum {
@@ -44,14 +47,14 @@ typedef struct {
 extern const char *http_200;
 
 extern const char *http_400;
-extern const char *http_403;
 extern const char *http_404;
 extern const char *http_500;
+extern const char *http_408;
 
 extern const char *body_400;
-extern const char *body_403;
 extern const char *body_404;
 extern const char *body_500;
+extern const char *body_408;
 
 extern ClientQueue client_queue;
 

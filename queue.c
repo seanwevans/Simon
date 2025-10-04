@@ -39,7 +39,7 @@ int client_queue_pop(ClientQueue *q) {
 }
 
 void *worker_thread(void *arg) {
-    const Server *config = (const Server *)arg;
+    Server *config = (Server *)arg;
     while (1) {
         int client_fd = client_queue_pop(&client_queue);
         handle_connection(client_fd, config);

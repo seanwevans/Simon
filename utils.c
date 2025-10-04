@@ -71,26 +71,27 @@ void parse_arguments(int argc, char *argv[], Server *config) {
         config->num_threads = NUM_THREADS;
     }
 
-    const char *docroot_arg = (argc > 5) ? argv[5] : ".";
-    char resolved_docroot[PATH_MAX];
-    if (realpath(docroot_arg, resolved_docroot) == NULL) {
-        fprintf(stderr, "Invalid document root: %s\n", docroot_arg);
-        exit(EXIT_FAILURE);
+    if (argc > 5) {
+        char *endptr;
+        errno = 0;
+        long timeout = strtol(argv[5], &endptr, 10);
+        if (errno != 0 || *endptr != '\0' || timeout <= 0) {
+            fprintf(stderr, "Invalid request timeout: %s\n", argv[5]);
+            exit(EXIT_FAILURE);
+        }
+        config->request_timeout_ms = (int)timeout;
     }
 
-    struct stat docroot_info;
-    if (stat(resolved_docroot, &docroot_info) != 0 || !S_ISDIR(docroot_info.st_mode)) {
-        fprintf(stderr, "Document root must be a directory: %s\n", resolved_docroot);
-        exit(EXIT_FAILURE);
+    if (argc > 6) {
+        char *endptr;
+        errno = 0;
+        long max_size = strtol(argv[6], &endptr, 10);
+        if (errno != 0 || *endptr != '\0' || max_size <= 0) {
+            fprintf(stderr, "Invalid max request line size: %s\n", argv[6]);
+            exit(EXIT_FAILURE);
+        }
+        config->max_request_line_size = (size_t)max_size;
     }
-
-    size_t docroot_len = strlen(resolved_docroot);
-    config->docroot = malloc(docroot_len + 1);
-    if (config->docroot == NULL) {
-        perror("Failed to allocate memory for document root");
-        exit(EXIT_FAILURE);
-    }
-    memcpy(config->docroot, resolved_docroot, docroot_len + 1);
 }
 
 const char* get_mime_type(const char *filename) {
