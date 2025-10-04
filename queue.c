@@ -39,10 +39,10 @@ int client_queue_pop(ClientQueue *q) {
 }
 
 void *worker_thread(void *arg) {
-    char *filename = (char *)arg;
+    const Server *config = (const Server *)arg;
     while (1) {
         int client_fd = client_queue_pop(&client_queue);
-        handle_connection(client_fd, filename);
+        handle_connection(client_fd, config);
     }
     return NULL;
 }
