@@ -8,11 +8,13 @@
 
 void parse_arguments(int argc, char *argv[], Server *config) {
     if (argc < 2) {
-        fprintf(stderr, "Usage: %s <filename> [port] [core_count] [num_threads]\n", argv[0]);
+        fprintf(stderr, "Usage: %s <filename> [port] [core_count] [num_threads] [request_timeout_ms] [max_request_line]\n", argv[0]);
         exit(EXIT_FAILURE);
     }
 
     config->file = argv[1];
+    config->request_timeout_ms = DEFAULT_REQUEST_TIMEOUT_MS;
+    config->max_request_line_size = DEFAULT_MAX_REQUEST_LINE_SIZE;
 
     if (argc > 2) {
         char *endptr;
@@ -51,6 +53,28 @@ void parse_arguments(int argc, char *argv[], Server *config) {
         config->num_threads = (int)threads;
     } else {
         config->num_threads = NUM_THREADS;
+    }
+
+    if (argc > 5) {
+        char *endptr;
+        errno = 0;
+        long timeout = strtol(argv[5], &endptr, 10);
+        if (errno != 0 || *endptr != '\0' || timeout <= 0) {
+            fprintf(stderr, "Invalid request timeout: %s\n", argv[5]);
+            exit(EXIT_FAILURE);
+        }
+        config->request_timeout_ms = (int)timeout;
+    }
+
+    if (argc > 6) {
+        char *endptr;
+        errno = 0;
+        long max_size = strtol(argv[6], &endptr, 10);
+        if (errno != 0 || *endptr != '\0' || max_size <= 0) {
+            fprintf(stderr, "Invalid max request line size: %s\n", argv[6]);
+            exit(EXIT_FAILURE);
+        }
+        config->max_request_line_size = (size_t)max_size;
     }
 }
 
