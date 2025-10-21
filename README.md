@@ -1,4 +1,5 @@
 # Multi-threaded Web Server in C
+<img width="256" alt="*spider noises*" src="https://github.com/user-attachments/assets/69926bac-aaa4-4b1b-a792-9b9047d92822" />
 
 This project is a lightweight multi-threaded web server implemented in C. It supports basic HTTP request handling, serving static files, and logging client interactions. The server is capable of processing multiple requests concurrently through worker threads.
 
